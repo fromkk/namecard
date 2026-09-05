@@ -1,55 +1,29 @@
 import Foundation
 
-/// Image formats understood by the namecard firmware (SSD1680 controller).
-///
-/// Mirrors the Android `NativeImageFormat` constants so BIN files are byte
-/// compatible between the two clients and the firmware.
-enum NamecardImageFormat: Int, CaseIterable, Sendable {
-    case dotDensity = 1
-    case gray4 = 2
-
-    var byteCount: Int {
-        switch self {
-        case .dotDensity: return NativeImageFormat.byteCount
-        case .gray4: return NativeImageFormat.gray4ByteCount
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .dotDensity: return "ドット密度"
-        case .gray4: return "4階調"
-        }
-    }
-}
-
 enum NativeImageFormatError: Error, LocalizedError {
-    case invalidCanvasSize(width: Int, height: Int)
     case invalidPixelCount
     case invalidByteCount(Int)
 
     var errorDescription: String? {
         switch self {
-        case let .invalidCanvasSize(width, height):
-            return "キャンバスは \(NativeImageFormat.width)x\(NativeImageFormat.height) である必要があります（現在 \(width)x\(height)）"
         case .invalidPixelCount:
             return "ARGB ピクセル数がキャンバスと一致しません"
         case let .invalidByteCount(count):
-            return "BIN は \(NativeImageFormat.byteCount) または \(NativeImageFormat.gray4ByteCount) バイトである必要があります（現在 \(count)）"
+            return "BIN は \(NativeImageFormat.byteCount) バイトである必要があります（現在 \(count)）"
         }
     }
 }
 
-/// Converts an ARGB canvas to SSD1680 native display data and back.
+/// Converts an ARGB canvas to SSD1680 native 1-bit display data and back.
 ///
-/// Pixels are `0xAARRGGBB`, row-major, exactly as Android's `Color` ints.
-/// The native result stores 16 bytes across the short axis for each of the
-/// 296 long-axis rows, MSB first, where 1 means white and 0 means black.
+/// Pixels are `0xAARRGGBB`, row-major, exactly as Android's `Color` ints. The
+/// native result stores 16 bytes across the short axis for each of the 296
+/// long-axis rows, MSB first, where 1 means white and 0 means black. This is
+/// byte-compatible with the Android client's dot-density BIN format.
 enum NativeImageFormat {
     static let width = 296
     static let height = 128
-    static let byteCount = width * height / 8
-    static let gray4ByteCount = byteCount * 2
+    static let byteCount = width * height / 8 // 4736
 
     private static let bayer4x4: [[Int]] = [
         [0, 8, 2, 10],
@@ -58,17 +32,11 @@ enum NativeImageFormat {
         [15, 7, 13, 5],
     ]
 
-    // MARK: - Encoding
-
-    static func encode(_ pixels: [UInt32], format: NamecardImageFormat) throws -> [UInt8] {
-        switch format {
-        case .dotDensity: return try encodeDotDensity(pixels)
-        case .gray4: return try encodeGray4(pixels)
+    /// Encodes a 296x128 ARGB image to native 1-bit data via 4x4 Bayer dither.
+    static func encode(_ pixels: [UInt32]) throws -> [UInt8] {
+        guard pixels.count == width * height else {
+            throw NativeImageFormatError.invalidPixelCount
         }
-    }
-
-    static func encodeDotDensity(_ pixels: [UInt32]) throws -> [UInt8] {
-        try validate(pixels)
         var native = [UInt8](repeating: 0xff, count: byteCount)
         for y in 0..<height {
             for x in 0..<width {
@@ -82,66 +50,22 @@ enum NativeImageFormat {
         return native
     }
 
-    static func encodeGray4(_ pixels: [UInt32]) throws -> [UInt8] {
-        try validate(pixels)
-        var native = [UInt8](repeating: 0, count: gray4ByteCount)
-        for y in 0..<height {
-            for x in 0..<width {
-                let grayCode = min(3, luminanceOnWhite(pixels[y * width + x]) / 64)
-                let index = x * (height / 8) + y / 8
-                let mask = UInt8(0x80 >> (y & 7))
-                if grayCode & 0x01 == 0 {
-                    native[index] |= mask
-                }
-                if grayCode & 0x02 == 0 {
-                    native[byteCount + index] |= mask
-                }
-            }
-        }
-        return native
-    }
-
-    // MARK: - Decoding (for previews)
-
-    static func decode(_ image: [UInt8], format: NamecardImageFormat) throws -> [UInt32] {
-        guard image.count == format.byteCount else {
+    /// Decodes native 1-bit data back to ARGB pixels for previews.
+    static func decode(_ image: [UInt8]) throws -> [UInt32] {
+        guard image.count == byteCount else {
             throw NativeImageFormatError.invalidByteCount(image.count)
         }
-        let shades: [UInt32] = [0xff00_0000, 0xff55_5555, 0xffaa_aaaa, 0xffff_ffff]
+        let white: UInt32 = 0xffff_ffff
+        let black: UInt32 = 0xff00_0000
         var pixels = [UInt32](repeating: 0, count: width * height)
         for pixelIndex in 0..<(width * height) {
             let x = pixelIndex % width
             let y = pixelIndex / width
             let nativeIndex = x * (height / 8) + y / 8
             let mask = UInt8(0x80 >> (y & 7))
-            switch format {
-            case .dotDensity:
-                pixels[pixelIndex] = (image[nativeIndex] & mask) != 0 ? shades[3] : shades[0]
-            case .gray4:
-                let low = (image[nativeIndex] & mask) != 0 ? 0 : 1
-                let high = (image[byteCount + nativeIndex] & mask) != 0 ? 0 : 2
-                pixels[pixelIndex] = shades[low + high]
-            }
+            pixels[pixelIndex] = (image[nativeIndex] & mask) != 0 ? white : black
         }
         return pixels
-    }
-
-    // MARK: - Format helpers
-
-    static func format(forByteCount count: Int) throws -> NamecardImageFormat {
-        switch count {
-        case byteCount: return .dotDensity
-        case gray4ByteCount: return .gray4
-        default: throw NativeImageFormatError.invalidByteCount(count)
-        }
-    }
-
-    // MARK: - Private
-
-    private static func validate(_ pixels: [UInt32]) throws {
-        guard pixels.count == width * height else {
-            throw NativeImageFormatError.invalidPixelCount
-        }
     }
 
     /// Composites a possibly translucent pixel onto white, then returns its

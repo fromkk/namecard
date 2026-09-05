@@ -6,7 +6,6 @@ import SwiftUI
 @Observable
 final class HomeViewModel {
     // Editing state
-    var selectedFormat: NamecardImageFormat = .dotDensity
     var cleanBeforeWrite = true
     var selectedPatternId = 1
     private(set) var sourceImage: UIImage?
@@ -61,8 +60,8 @@ final class HomeViewModel {
         }
         // Show exactly what the e-paper will receive (encode then decode).
         guard
-            let encoded = try? NativeImageFormat.encode(pixels, format: selectedFormat),
-            let decoded = try? NativeImageFormat.decode(encoded, format: selectedFormat)
+            let encoded = try? NativeImageFormat.encode(pixels),
+            let decoded = try? NativeImageFormat.decode(encoded)
         else {
             previewImage = CanvasRenderer.image(fromCanvasPixels: pixels)
             return
@@ -78,11 +77,10 @@ final class HomeViewModel {
             append("画像を変換できませんでした。\n")
             return
         }
-        let format = selectedFormat
         let clean = cleanBeforeWrite
         do {
-            let bytes = try NativeImageFormat.encode(pixels, format: format)
-            run(.image(bytes: bytes, format: format, clean: clean), alert: "名刺へタッチして固定してください")
+            let bytes = try NativeImageFormat.encode(pixels)
+            run(.image(bytes: bytes, clean: clean), alert: "名刺へタッチして固定してください")
         } catch {
             append("画像変換エラー: \(error.localizedDescription)\n")
         }

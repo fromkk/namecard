@@ -16,7 +16,7 @@ struct HomeView: View {
                     }
 
                     previewSection
-                    formatSection
+                    optionsSection
                     imageActions
                     Divider()
                     hardwareTestSection
@@ -30,7 +30,6 @@ struct HomeView: View {
             .onChange(of: photoItem) { _, newValue in
                 Task { await model.loadImage(from: newValue) }
             }
-            .onChange(of: model.selectedFormat) { _, _ in model.updatePreview() }
         }
     }
 
@@ -59,20 +58,9 @@ struct HomeView: View {
         }
     }
 
-    private var formatSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("送信方式").font(.headline)
-            Picker("送信方式", selection: $model.selectedFormat) {
-                ForEach(NamecardImageFormat.allCases, id: \.self) { format in
-                    Text(format.displayName).tag(format)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Toggle("書き換え前にクリーニング（白→黒→白）", isOn: $model.cleanBeforeWrite)
-                .disabled(model.selectedFormat == .gray4)
-                .font(.subheadline)
-        }
+    private var optionsSection: some View {
+        Toggle("書き換え前にクリーニング（白→黒→白）", isOn: $model.cleanBeforeWrite)
+            .font(.subheadline)
     }
 
     private var imageActions: some View {

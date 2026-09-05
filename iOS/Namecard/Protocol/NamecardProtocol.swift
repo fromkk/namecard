@@ -22,6 +22,7 @@ enum NamecardFirmwareError: Int {
     case transferId = 7
     case sequence = 8
     case offset = 9
+    case notCommitted = 13
     case vddTimeout = 14
     case vddDroop = 15
     case epdTimeout = 16
@@ -38,6 +39,7 @@ enum NamecardFirmwareError: Int {
         case .transferId: return "転送ID不一致"
         case .sequence: return "シーケンス不一致"
         case .offset: return "オフセット不一致"
+        case .notCommitted: return "未COMMIT/保存不一致"
         case .vddTimeout: return "VDD充電タイムアウト"
         case .vddDroop: return "VDD低下"
         case .epdTimeout: return "EPD BUSYタイムアウト"

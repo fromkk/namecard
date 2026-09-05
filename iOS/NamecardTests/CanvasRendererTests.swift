@@ -23,7 +23,7 @@ struct CanvasRendererTests {
     @Test func darkImageProducesNonWhiteNativeBytes() throws {
         let black = solidImage(.black)
         let pixels = try #require(CanvasRenderer.canvasPixels(from: black))
-        let encoded = try NativeImageFormat.encodeDotDensity(pixels)
+        let encoded = try NativeImageFormat.encode(pixels)
         // A black source must set (clear) plenty of bits, not stay all-white.
         #expect(encoded.contains { $0 != 0xff })
     }

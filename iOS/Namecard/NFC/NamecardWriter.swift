@@ -23,7 +23,7 @@ nonisolated final class NamecardWriter: NSObject, @unchecked Sendable {
     enum Request {
         case status
         case pattern(Int)
-        case image(bytes: [UInt8], format: NamecardImageFormat, clean: Bool)
+        case image(bytes: [UInt8], clean: Bool)
     }
 
     var isAvailable: Bool { NFCTagReaderSession.readingAvailable }
@@ -92,8 +92,8 @@ nonisolated final class NamecardWriter: NSObject, @unchecked Sendable {
                 _ = try await transfer.status(mailbox)
             case let .pattern(id):
                 try await transfer.pattern(mailbox, id: id)
-            case let .image(bytes, format, clean):
-                let imageSession = reuseOrCreateSession(bytes: bytes, format: format, clean: clean)
+            case let .image(bytes, clean):
+                let imageSession = reuseOrCreateSession(bytes: bytes, clean: clean)
                 try await transfer.image(mailbox, session: imageSession)
                 retainedImageSession = nil
             }
@@ -107,19 +107,13 @@ nonisolated final class NamecardWriter: NSObject, @unchecked Sendable {
         }
     }
 
-    private func reuseOrCreateSession(
-        bytes: [UInt8],
-        format: NamecardImageFormat,
-        clean: Bool
-    ) -> ImageTransferSession {
-        let expectedClean = format == .dotDensity && clean
+    private func reuseOrCreateSession(bytes: [UInt8], clean: Bool) -> ImageTransferSession {
         if let previous = retainedImageSession,
            previous.image == bytes,
-           previous.format == format,
-           previous.cleanBeforeWrite == expectedClean {
+           previous.cleanBeforeWrite == clean {
             return previous
         }
-        let created = ImageTransferSession(image: bytes, format: format, cleanBeforeWrite: clean)
+        let created = ImageTransferSession(image: bytes, cleanBeforeWrite: clean)
         retainedImageSession = created
         return created
     }
