@@ -1,17 +1,14 @@
 import Observation
-import PhotosUI
 import SwiftUI
 
+/// Shared NFC coordinator: runs writes/patterns/status, exposes progress and a
+/// running log for the UI. Editor and Settings screens share one instance.
 @MainActor
 @Observable
-final class HomeViewModel {
-    // Editing state
+final class NamecardController {
     var cleanBeforeWrite = true
     var selectedPatternId = 1
-    private(set) var sourceImage: UIImage?
-    private(set) var previewImage: UIImage?
 
-    // Transfer state
     private(set) var isBusy = false
     private(set) var busyTitle = ""
     private(set) var progressFraction = 0.0
@@ -24,66 +21,11 @@ final class HomeViewModel {
     ]
 
     var nfcAvailable: Bool { writer.isAvailable }
-    var canWriteImage: Bool { sourceImage != nil && !isBusy }
 
     private let writer = NamecardWriter()
 
-    // MARK: - Image selection
-
-    func loadImage(from item: PhotosPickerItem?) async {
-        guard let item else { return }
-        do {
-            guard
-                let data = try await item.loadTransferable(type: Data.self),
-                let image = UIImage(data: data)
-            else {
-                append("画像を読み込めませんでした。\n")
-                return
-            }
-            setImage(image)
-        } catch {
-            append("画像読込エラー: \(error.localizedDescription)\n")
-        }
-    }
-
-    func setImage(_ image: UIImage) {
-        sourceImage = image
-        writer.resetImageProgress()
-        updatePreview()
-        append("画像を読み込みました。送信方式を選び、名刺へタッチしてください。\n")
-    }
-
-    func updatePreview() {
-        guard let sourceImage, let pixels = CanvasRenderer.canvasPixels(from: sourceImage) else {
-            previewImage = nil
-            return
-        }
-        // Show exactly what the e-paper will receive (encode then decode).
-        guard
-            let encoded = try? NativeImageFormat.encode(pixels),
-            let decoded = try? NativeImageFormat.decode(encoded)
-        else {
-            previewImage = CanvasRenderer.image(fromCanvasPixels: pixels)
-            return
-        }
-        previewImage = CanvasRenderer.image(fromCanvasPixels: decoded)
-    }
-
-    // MARK: - NFC operations
-
-    func writeImage() {
-        guard let sourceImage else { return }
-        guard let pixels = CanvasRenderer.canvasPixels(from: sourceImage) else {
-            append("画像を変換できませんでした。\n")
-            return
-        }
-        let clean = cleanBeforeWrite
-        do {
-            let bytes = try NativeImageFormat.encode(pixels)
-            run(.image(bytes: bytes, clean: clean), alert: "名刺へタッチして固定してください")
-        } catch {
-            append("画像変換エラー: \(error.localizedDescription)\n")
-        }
+    func writeImage(bytes: [UInt8]) {
+        run(.image(bytes: bytes, clean: cleanBeforeWrite), alert: "名刺へタッチして固定してください")
     }
 
     func checkStatus() {
@@ -92,6 +34,10 @@ final class HomeViewModel {
 
     func writePattern() {
         run(.pattern(selectedPatternId), alert: "名刺へタッチして固定してください")
+    }
+
+    func clearLog() {
+        logText = ""
     }
 
     private func run(_ request: NamecardWriter.Request, alert: String) {
@@ -135,8 +81,6 @@ final class HomeViewModel {
         case .status: return "STATUSを確認中"
         }
     }
-
-    // MARK: - Log
 
     private func append(_ message: String) {
         logText += message
