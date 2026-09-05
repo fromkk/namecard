@@ -3,16 +3,33 @@ import SwiftUI
 struct RootView: View {
     @State private var controller = NamecardController()
     @State private var editor = EditorCanvasState()
+    @State private var library = LibraryStore()
+    @State private var selectedTab = 0
 
     var body: some View {
-        TabView {
-            EditorView(editor: editor, controller: controller)
+        TabView(selection: $selectedTab) {
+            EditorView(editor: editor, controller: controller, library: library)
                 .tabItem { Label("New", systemImage: "square.and.pencil") }
+                .tag(0)
+
+            LibraryView(library: library, controller: controller, onEdit: loadCardIntoEditor)
+                .tabItem { Label("Library", systemImage: "square.stack") }
+                .tag(1)
 
             SettingsView(controller: controller)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(2)
         }
         .overlay { if controller.isBusy { progressOverlay } }
+    }
+
+    private func loadCardIntoEditor(_ card: LibraryCard) {
+        guard
+            let pixels = try? NativeImageFormat.decode(card.bytes),
+            let image = CanvasRenderer.image(fromCanvasPixels: pixels)
+        else { return }
+        editor.replaceWithImage(image)
+        selectedTab = 0
     }
 
     private var progressOverlay: some View {

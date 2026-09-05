@@ -4,10 +4,13 @@ import SwiftUI
 struct EditorView: View {
     @Bindable var editor: EditorCanvasState
     @Bindable var controller: NamecardController
+    @Bindable var library: LibraryStore
 
     @State private var photoItem: PhotosPickerItem?
     @State private var showingTextInput = false
     @State private var textInput = ""
+    @State private var showingSaveDialog = false
+    @State private var saveName = ""
 
     // Gesture tracking
     @State private var dragging = false
@@ -38,6 +41,14 @@ struct EditorView: View {
             }
             .padding()
             .navigationTitle("New")
+            .toolbar {
+                Button {
+                    saveName = ""
+                    showingSaveDialog = true
+                } label: {
+                    Label("ライブラリに保存", systemImage: "square.and.arrow.down")
+                }
+            }
             .onChange(of: photoItem) { _, item in
                 Task { await loadImage(item) }
             }
@@ -48,6 +59,11 @@ struct EditorView: View {
                     textInput = ""
                 }
                 Button("キャンセル", role: .cancel) { textInput = "" }
+            }
+            .alert("ライブラリに保存", isPresented: $showingSaveDialog) {
+                TextField("カード名", text: $saveName)
+                Button("保存") { saveToLibrary() }
+                Button("キャンセル", role: .cancel) {}
             }
         }
     }
@@ -180,6 +196,11 @@ struct EditorView: View {
         } catch {
             // Rendering can only fail if the canvas context could not be built.
         }
+    }
+
+    private func saveToLibrary() {
+        guard let bytes = try? editor.renderNativeImage() else { return }
+        library.save(name: saveName, bytes: bytes)
     }
 
     private func loadImage(_ item: PhotosPickerItem?) async {
