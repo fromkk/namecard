@@ -131,15 +131,18 @@ nonisolated struct NamecardTransfer {
         try ack.requireSuccess()
         onLog("PATTERN \(id) ACK: VDD=\(ack.vddMv)mV。VRESを充電します。")
 
+        // STATUS/EXECUTE after a PATTERN carry offset = image size (as Android
+        // does); the firmware rejects offset 0 here with code 9 (offset mismatch).
+        let offset = ImageTransferSession.imageSize
         try await sleep(Constants.chargeQuietMs)
         repeat {
-            ack = try await statusFrame(mailbox, transferId, sequence: 1)
+            ack = try await statusFrame(mailbox, transferId, sequence: 1, offset: offset)
             try ack.requireSuccess()
             onLog("充電: state=\(ack.state) VDD=\(ack.vddMv)mV min=\(ack.minimumVddMv)mV")
             if ack.state != 3 { try await sleep(1_000) }
         } while ack.state != 3
 
-        ack = try await mailbox.exchange(frame(.execute, transferId, sequence: 1))
+        ack = try await mailbox.exchange(frame(.execute, transferId, sequence: 1, offset: offset))
         try ack.requireSuccess()
         var sequence = ack.expectedSequence
         let firmwareBatch = ack.batchCleanActive
@@ -149,7 +152,7 @@ nonisolated struct NamecardTransfer {
             onLog("EXECUTE ACK。\(quiet)ms、RF通信を停止します。")
             try await sleep(quiet + 250)
             complete = try await statusFrame(
-                mailbox, transferId, sequence: sequence,
+                mailbox, transferId, sequence: sequence, offset: offset,
                 timeoutMs: firmwareBatch ? Constants.batchStatusTimeoutMs : 1_500
             )
             try complete.requireSuccess()
@@ -159,7 +162,7 @@ nonisolated struct NamecardTransfer {
             }
             if complete.state == 3 {
                 sequence = complete.expectedSequence
-                ack = try await mailbox.exchange(frame(.execute, transferId, sequence: sequence))
+                ack = try await mailbox.exchange(frame(.execute, transferId, sequence: sequence, offset: offset))
                 try ack.requireSuccess()
                 sequence = ack.expectedSequence
             } else {
