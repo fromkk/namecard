@@ -5,12 +5,20 @@ enum NamecardWriterError: Error, LocalizedError {
     case nfcNotAvailable
     case sessionUnavailable
     case notISO15693
+    case invalidURL
+    case ndefUnsupported
+    case ndefNotWritable
+    case ndefVerifyFailed
 
     var errorDescription: String? {
         switch self {
         case .nfcNotAvailable: return "この端末ではNFCを利用できません"
         case .sessionUnavailable: return "NFCセッションを開始できませんでした"
         case .notISO15693: return "対応するNFC-Vタグではありません"
+        case .invalidURL: return "URLの形式を確認してください"
+        case .ndefUnsupported: return "名刺側FWがURL書き込みに未対応です。先にFWを更新してください"
+        case .ndefNotWritable: return "この名刺のURL領域は書き込みできません"
+        case .ndefVerifyFailed: return "書き込んだURLを読み返せませんでした"
         }
     }
 }
@@ -24,6 +32,7 @@ nonisolated final class NamecardWriter: NSObject, @unchecked Sendable {
         case status
         case pattern(Int)
         case image(bytes: [UInt8], clean: Bool)
+        case url(String)
     }
 
     var isAvailable: Bool { NFCTagReaderSession.readingAvailable }
@@ -96,6 +105,8 @@ nonisolated final class NamecardWriter: NSObject, @unchecked Sendable {
                 let imageSession = reuseOrCreateSession(bytes: bytes, clean: clean)
                 try await transfer.image(mailbox, session: imageSession)
                 retainedImageSession = nil
+            case let .url(urlString):
+                try await writeURL(urlString, tag: iso15693, mailbox: mailbox, log: log, progress: progress)
             }
 
             session.invalidate()
@@ -105,6 +116,51 @@ nonisolated final class NamecardWriter: NSObject, @unchecked Sendable {
             session.invalidate(errorMessage: error.localizedDescription)
             finish(.failure(error))
         }
+    }
+
+    /// Writes an NDEF URI record after asking the firmware to pause its mailbox
+    /// image processing, then reads it back to verify. Mirrors the Android
+    /// `runUrlWrite` handshake (NDEF_WRITE_PREPARE → disable mailbox → write →
+    /// verify → re-enable).
+    private func writeURL(
+        _ urlString: String,
+        tag: NFCISO15693Tag,
+        mailbox: ST25Mailbox,
+        log: @Sendable (String) -> Void,
+        progress: @Sendable (TransferProgress) -> Void
+    ) async throws {
+        guard let url = URL(string: urlString),
+              let payload = NFCNDEFPayload.wellKnownTypeURIPayload(url: url) else {
+            throw NamecardWriterError.invalidURL
+        }
+        let message = NFCNDEFMessage(records: [payload])
+
+        progress(TransferProgress(fraction: 0.25, status: "URL書き込みを準備中"))
+        let transferId = UInt16(UInt64(Date().timeIntervalSince1970 * 1000) & 0xffff)
+        let ack = try await mailbox.exchange(
+            NamecardProtocol.frame(type: .ndefWritePrepare, transferId: transferId, sequence: 0, offset: 0, payload: [])
+        )
+        if ack.error == NamecardFirmwareError.command.rawValue {
+            throw NamecardWriterError.ndefUnsupported
+        }
+        try ack.requireSuccess()
+        try await mailbox.disable()
+
+        progress(TransferProgress(fraction: 0.5, status: "URLを書き込み中"))
+        let (status, _) = try await tag.queryNDEFStatus()
+        guard status == .readWrite else { throw NamecardWriterError.ndefNotWritable }
+        try await tag.writeNDEF(message)
+
+        progress(TransferProgress(fraction: 0.8, status: "URLを確認中"))
+        let readBack = try await tag.readNDEF()
+        guard readBack.records.contains(where: { $0.wellKnownTypeURIPayload() == url }) else {
+            throw NamecardWriterError.ndefVerifyFailed
+        }
+
+        // Best effort: re-enable the mailbox so image writes work again.
+        try? await mailbox.enable()
+        log("URLを書き込み、読み返して確認しました: \(url.absoluteString)")
+        progress(TransferProgress(fraction: 1.0, status: "URLを書き込みました"))
     }
 
     private func reuseOrCreateSession(bytes: [UInt8], clean: Bool) -> ImageTransferSession {

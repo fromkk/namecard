@@ -36,6 +36,15 @@ final class NamecardController {
         run(.pattern(selectedPatternId), alert: "名刺へタッチして固定してください")
     }
 
+    func writeURL(_ input: String) {
+        switch UrlValidation.normalize(input) {
+        case let .valid(url):
+            run(.url(url), alert: "URLを書き込む名刺へタッチしてください")
+        case let .invalid(message):
+            append("URLエラー: \(message)\n")
+        }
+    }
+
     func clearLog() {
         logText = ""
     }
@@ -79,6 +88,7 @@ final class NamecardController {
         case .image: return "NFCで画像を書き込み中"
         case .pattern: return "パターンを書き込み中"
         case .status: return "STATUSを確認中"
+        case .url: return "URLを書き込み中"
         }
     }
 

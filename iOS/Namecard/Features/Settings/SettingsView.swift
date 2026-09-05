@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var controller: NamecardController
+    @State private var urlText = ""
 
     var body: some View {
         NavigationStack {
@@ -9,6 +10,19 @@ struct SettingsView: View {
                 Section("書き込みオプション") {
                     Toggle("書き換え前にクリーニング（白→黒→白）", isOn: $controller.cleanBeforeWrite)
                         .font(.subheadline)
+                }
+
+                Section("URLを書き込む（NDEF）") {
+                    TextField("https://example.com", text: $urlText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    Button {
+                        controller.writeURL(urlText)
+                    } label: {
+                        Label("URLを書き込む", systemImage: "link")
+                    }
+                    .disabled(controller.isBusy || urlText.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
 
                 Section("内蔵パターン（画像なしで表示更新を試験）") {
