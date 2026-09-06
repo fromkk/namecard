@@ -1,40 +1,42 @@
-# iOSアプリの開発方法と計画
+# iOSアプリの構成と実装メモ
 
 ## 現在の状況
 
-このプロジェクトには、現時点でビルド可能なiOSアプリや配布済みIPAはありません。以下は、既存のAndroidアプリとファームウェアをiOSへ移植するための設計資料です。
+iOSアプリのソースは[`iOS/`](iOS/)にあります。SwiftUI + MVVMで実装し、外部ライブラリには依存していません（Core NFC / SwiftUI / Core Graphicsのみ）。iPhone実機とv5基板で、画像書き込み・URL書き込み・内蔵パターン表示を確認済みです。
 
-iOS版は技術的に実現できる可能性が高いと考えています。その根拠は次の通りです。
+対応機能:
 
-- AppleのCore NFCはNFC Type 5 / ISO 15693タグの読み書きと、`0xA0`〜`0xDF`のメーカー独自コマンドをサポートしています。
-- この名刺のST25DV04Kとの通信で使うコマンドは`0xAA`、`0xAC`、`0xAD`、`0xAE`で、Core NFCの対応範囲に入っています。
-- STMicroelectronicsは、ST25DVを扱うiOS用NFC TapアプリとFTM（Fast Transfer Mode）の実装例を公開しています。
+- 画像書き込み（ドット密度 / 1bpp）と、レイヤー編集（テキスト・画像、移動・拡大縮小・回転・重なり順・Undo/Redo・グリッド）
+- Library（カードのJSON + BIN保存、サムネイル、編集読込、改名、削除、Android互換のBIN入出力）
+- URL（NDEF URI）書き込みと読み返し確認
+- 内蔵パターン / STATUS確認
 
-ただし、Core NFCのセッション管理、転送可能サイズ、NFCアンテナ位置、RF給電中の安定性はAndroidと同一ではありません。この基板と独自プロトコルを使ったiPhone実機検証はまだないため、「対応済み」ではなく「実現可能性が高い」という段階です。
+4階調（gray4）表示は今回のスコープ外です。iOSのリーダーセッションは約60秒で終了する一方、4階調はEPDの帯域ごとの更新と、電源サイクルをまたぐ2プレーン再開が必要で相性が悪いため、まず1bppに絞りました。
 
-## まだ作成していない理由
+以降は、移植時の設計資料と、プロトコル・画像形式・コマンドの仕様（`iOS/`実装の背景）です。
 
-主な理由は開発・配布予算です。XcodeとSimulatorを使い、UI、画像変換、通信プロトコルなどNFC以外の部分を開発・テストするだけなら無料で始められます。しかし、Core NFCを有効にしたアプリをiPhoneへ署名・インストールして実機検証するには`Near Field Communication Tag Reading`のCapabilityが必要です。このCapabilityは無料のPersonal Teamでは利用できず、Apple Developer Programへの加入が必要です。執筆時点のApple公表価格は年間99 USDまたは地域ごとの価格です。App StoreやTestFlightでの配布にも加入が必要です。
+## ビルドと署名
 
-そのため、現在はAndroid版とハードウェアの完成を優先しています。iOS版を作らない技術的な方針があるわけではありません。
+1. `iOS/Namecard.xcodeproj`をXcodeで開く
+2. アプリターゲットの`Signing & Capabilities`で自分のTeamを選ぶ（`Near Field Communication Tag Reading` Capabilityと`NFCReaderUsageDescription`は設定済み、Bundle Identifierは`work.tokumaru.namecard`）
+3. iPhone実機を接続してビルド・実行する
+
+Core NFCを有効にしたアプリを実機で署名・実行するには`Near Field Communication Tag Reading` Capabilityが必要です。これは無料のPersonal Teamでは利用できず、Apple Developer Program（年額）への加入が必要です。Simulatorではファームウェアと通信できないため、NFC以外（UI・画像変換）の確認のみ可能です。
 
 - [Apple Developer Program](https://developer.apple.com/programs/)
-- [Apple Developer Programのメンバーシップ比較](https://developer.apple.com/support/compare-memberships/)
 - [iOSでサポートされるCapability](https://developer.apple.com/help/account/reference/supported-capabilities-ios/)
-
-すべてのiPhone実機向けアプリにはコード署名が必要です。無料のApple AccountでもPersonal Teamによる署名はできますが、AppleのCapability対応表では`Near Field Communication (NFC) Tag Reading`はApple Developer ProgramまたはApple Developer Enterprise Program向けで、無料のApple Developer欄には対応表示がありません。そのため、このアプリのNFC機能を実機でビルド・検証する時点から有料メンバーシップが必要です。
 
 ## 目標とする機能
 
-iOS版では、単にNFCへ画像を書くだけでなく、Android版と同じ主要機能を目標にします。
+iOS版はAndroid版の主要機能を次のように実装しています（4階調を除く）。
 
-| Android版の機能 | iOS版の候補 |
+| Android版の機能 | iOS版の実装 |
 | --- | --- |
 | Jetpack Compose UI | SwiftUI |
 | テキスト・画像レイヤー編集 | SwiftUI gestures + Core Graphics |
 | 移動、拡大縮小、回転、整列、Undo/Redo | SwiftUI state + UndoManager |
 | 1-bitディザ画像 | Core Graphicsで描画後、同じ4×4 Bayer変換 |
-| 4階調画像 | SSD1680用2プレーンへ変換 |
+| 4階調画像 | 未対応（スコープ外。「現在の状況」参照） |
 | NFC-V / ST25DV Mailbox | Core NFC `NFCTagReaderSession` + `NFCISO15693Tag` |
 | 中断後の再開 | `STATUS`応答のsequence/offsetから再開 |
 | URL書き込み | `NFCNDEFTag`によるNDEF URI書き込みと読み返し |
@@ -65,35 +67,36 @@ Android側の挙動だけを推測して別プロトコルを作らず、ファ�
 - v5基板と現行ファームウェア
 - Apple Developer Programのメンバーシップ。Core NFCを有効にした実機ビルドと一般公開の両方で必要です
 
-XcodeでSwiftUI Appを作り、将来的には`client/ios/`へ配置します。Bundle Identifierは自分のTeamで一意な値に変更してください。
-
-Targetの`Signing & Capabilities`から`Near Field Communication Tag Reading`を追加し、`Info.plist`へ`NFCReaderUsageDescription`を設定します。Capabilityを追加すると、XcodeがNFC reader session用entitlementを生成します。
+アプリは[`iOS/`](iOS/)に配置済みです。Bundle Identifierは`work.tokumaru.namecard`、Teamは未設定なので、`Signing & Capabilities`で自分のTeamを選んでください。`Near Field Communication Tag Reading` Capability（entitlement）と`NFCReaderUsageDescription`は設定済みです。
 
 - [Apple: Building an NFC Tag-Reader App](https://developer.apple.com/documentation/corenfc/building-an-nfc-tag-reader-app)
 - [Apple: Core NFC](https://developer.apple.com/documentation/corenfc)
 
-## 推奨ディレクトリ構成
+## ディレクトリ構成
 
 ```text
-client/ios/
+iOS/
   Namecard.xcodeproj
   Namecard/
-    App/
-    Features/Editor/
-    Features/Library/
-    Features/Settings/
-    Image/NativeImageFormat.swift
-    NFC/ISO15693Session.swift
-    NFC/ST25Mailbox.swift
-    Protocol/NamecardProtocol.swift
-    Protocol/Ack.swift
-    Storage/CardLibrary.swift
+    NamecardApp.swift
+    Namecard.entitlements
+    Protocol/{NamecardProtocol.swift, Ack.swift}
+    Image/{NativeImageFormat.swift, CanvasRenderer.swift}
+    NFC/{ST25Mailbox.swift, NamecardTransfer.swift, NamecardWriter.swift}
+    Features/
+      RootView.swift
+      NamecardController.swift
+      Editor/{EditorCanvasState.swift, EditorView.swift}
+      Library/{CardLibraryRepository.swift, LibraryStore.swift, LibraryView.swift}
+      Settings/{SettingsView.swift, UrlValidation.swift}
   NamecardTests/
 ```
 
-`NamecardProtocol`、`Ack`、`NativeImageFormat`はCore NFCやSwiftUIに依存させず、通常のunit testだけで検証できるようにします。
+`NamecardProtocol`、`Ack`、`NativeImageFormat`はCore NFCやSwiftUIに依存させず、単体テストだけで検証できるようにしています。`ST25Mailbox`（Core NFC）と`NamecardTransfer`（転送の状態機械）がその上で通信を担います。
 
 ## 実装手順
+
+以下は移植時の手順で、現在の[`iOS/`](iOS/)実装の背景です。プロトコルと画像形式は`firmware`とAndroid実装を正として移植し、Swift Testingの単体テストで一致を確認しています。
 
 ### 1. プロトコルをSwiftへ移植する
 
@@ -231,18 +234,18 @@ BINファイル形式をAndroid版と同じにすれば、両OS間でデータ�
 
 ## 開発計画
 
-期限は未定です。機能を一度に移植せず、実機で不確実性を潰す順序にします。
+機能を一度に移植せず、実機で不確実性を潰す順序で進めました。
 
 | Phase | 完了条件 | 状況 |
 | --- | --- | --- |
-| 0. Feasibility spike | iPhoneでST25DVを検出し、`STATUS` ACKを取得 | 未着手 |
-| 1. Transport | Mailbox、CRC、retry、再タッチ再開のXCTestと実機確認 | 未着手 |
-| 2. Hardware update | PATTERN、1-bit画像、4階調画像を順に表示 | 未着手 |
-| 3. Editor | 画像・文字編集とAndroid互換BIN生成 | 未着手 |
-| 4. Library / URL | 保存、入出力、NDEF URL書き込み | 未着手 |
-| 5. Distribution | 複数iPhoneで検証し、配布方法と予算を決定 | 未着手 |
+| 0. Feasibility spike | iPhoneでST25DVを検出し、`STATUS` ACKを取得 | 完了 |
+| 1. Transport | Mailbox、CRC、retry、再タッチ再開 | 完了 |
+| 2. Hardware update | PATTERN、1-bit画像を表示 | 完了（4階調は対象外） |
+| 3. Editor | 画像・文字編集とAndroid互換BIN生成 | 完了 |
+| 4. Library / URL | 保存、入出力、NDEF URL書き込み | 完了 |
+| 5. Distribution | 複数iPhoneで検証し、配布方法を決定 | 未着手 |
 
-最初の到達点は完全なUIではなく、`STATUS`と`PATTERN`が動く最小アプリです。ここが成功すれば、Core NFCからMailbox経由でファームウェアを制御できることを確認できます。
+残る課題は、複数機種での検証と、整列スナップ／ガイド線・キャンバスのパン/ズームといったエディタの細部です。
 
 ## 実機テスト項目
 

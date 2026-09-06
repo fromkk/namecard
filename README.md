@@ -1,6 +1,6 @@
 # NFC Namecard/Badge
 
-NFCによる給電（Energy Harvesting）を用いた、書き換え可能な電子ペーパー / NFCタグ / マイコンと、ファームウェア、Androidアプリです。
+NFCによる給電（Energy Harvesting）を用いた、書き換え可能な電子ペーパー / NFCタグ / マイコンと、ファームウェア、Android/iOSアプリです。
 
 Maker Faire Tokyo 2026のブース「そうまめの部屋」で販売します。
 
@@ -10,7 +10,8 @@ Maker Faire Tokyo 2026のブース「そうまめの部屋」で販売します�
 - [`production/`](production/) — Gerber、BOM、CPLなどの製造データ
 - [`firmware/`](firmware/) — STM32ファームウェア
 - [`client/android/`](client/android/) — Androidアプリ
-- [`iOS_development.md`](iOS_development.md) — iOS版の移植方法と開発計画
+- [`iOS/`](iOS/) — iOSアプリ（SwiftUI）
+- [`iOS_development.md`](iOS_development.md) — iOSアプリの構成・実装メモ
 
 Maker Faire Tokyo 2026向けの現行製造データは[`production/v5/`](production/v5/)にあります。JLCPCBへ入稿するファイルと注意点は同ディレクトリのREADMEを確認してください。
 
@@ -18,7 +19,7 @@ Maker Faire Tokyo 2026向けの現行製造データは[`production/v5/`](produc
 
 **[最新版のAndroidアプリ（namecard.apk）をダウンロード](https://github.com/soumame/namecard/releases/download/android-main/namecard.apk)**
 
-利用にはAndroid 8.0以降のNFC対応端末が必要です。現在、このリポジトリからiOSアプリは提供していないため、iPhoneから表示内容を書き換えることはできません。iOS版の技術的な見通し、作り方、開発計画は[iOSアプリの開発方法と計画](iOS_development.md)にまとめています。
+利用にはAndroid 8.0以降のNFC対応端末が必要です。iOSアプリのソースは[`iOS/`](iOS/)にあります。配布バイナリ（TestFlight / App Store）は提供していないため、iPhoneで使うにはXcodeで自分でビルドしてください。構成や実装メモは[iOSアプリの構成・実装メモ](iOS_development.md)を参照してください。
 
 1. 上のリンクから`namecard.apk`をダウンロードする
 2. ブラウザからのインストールが止められた場合は、表示された設定画面で今回使用したブラウザからのインストールを許可する
@@ -32,6 +33,16 @@ Maker Faire Tokyo 2026向けの現行製造データは[`production/v5/`](produc
 
 うまく書き込めない場合は、スマートフォンのNFCアンテナ位置を確認し、ケースを外してからもう一度お試しください。書き込み中は名刺を動かしたり、ほかのアプリへ切り替えたりしないでください。
 
+## iOSアプリのビルド
+
+iOSアプリのソースは[`iOS/`](iOS/)にあります。SwiftUIで実装し、外部ライブラリには依存していません。配布バイナリは提供していないため、次の手順で自分でビルドしてください。
+
+1. `iOS/Namecard.xcodeproj`をXcodeで開く
+2. アプリターゲットの`Signing & Capabilities`で自分のTeamを選ぶ（`Near Field Communication Tag Reading` Capabilityは設定済み）
+3. iPhone実機を接続してビルド・実行する
+
+対応機能は、画像書き込み（ドット密度）、レイヤー編集、Library（Android互換のBIN入出力）、URL（NDEF）書き込み、内蔵パターン表示です。Core NFCの実機動作にはApple Developer Programへの加入が必要です。4階調表示は未対応です。詳しくは[iOSアプリの構成・実装メモ](iOS_development.md)を参照してください。
+
 ## 開発状況について
 
 詳しい開発状況は[ブログ記事](https://tokumaru.work/ja/tech/maker-faire-tokyo-2026/)をご確認ください。
@@ -43,12 +54,12 @@ Maker Faire Tokyo 2026向けの現行製造データは[`production/v5/`](produc
 - 少量製作のハードウェア向けアプリであるため、現在は署名済みAPKをGitHub Releasesで公開しています。
 - ソースコードもこのリポジトリで確認できます。
 
-### なんでiOS版は作成されていないの?
+### iOS版はあるの?
 
-- AppleのCore NFCは、この名刺で使うISO 15693タグとメーカー独自コマンドに対応しています。STMicroelectronicsもST25DV向けのiOS実装例を公開しているため、技術的には実現できる可能性が高いと考えています。ただし、この基板と独自通信プロトコルを使ったiPhone実機検証はまだ行っていません。
-- XcodeとSimulatorを使い、画面や画像変換などNFC以外の部分を開発するだけなら無料で始められます。ただし、Core NFCを有効にしたアプリをiPhoneへ署名・インストールして実機検証するには`Near Field Communication Tag Reading`のCapabilityが必要で、無料のPersonal Teamでは利用できません。年間99 USD（または地域ごとの価格）のApple Developer Programへの加入が必要です。App StoreやTestFlightでの配布にも同じ加入が必要なため、現在は主に予算の都合からiOS版を作成・公開していません。
-- 移植方法と段階的な計画は[iOSアプリの開発方法と計画](iOS_development.md)を参照してください。
-- iOS版を実装または実機検証できた方は、Pull Requestに加えて[https://tokumaru.work](https://tokumaru.work)からご連絡ください。
+- ソースは[`iOS/`](iOS/)にあります。画像書き込み（ドット密度）、レイヤー編集、Library、URL（NDEF）書き込み、内蔵パターン表示に対応し、iPhone実機とv5基板で動作を確認しています（4階調表示は未対応）。
+- 配布バイナリ（App Store / TestFlight）は提供していません。Core NFCを有効にしたアプリを実機で署名・実行するには`Near Field Communication Tag Reading`のCapabilityが必要で、無料のPersonal Teamでは利用できず、Apple Developer Programへの加入が必要です。そのため利用にはXcodeで自分でビルドしてください。
+- 構成や実装メモは[iOSアプリの構成・実装メモ](iOS_development.md)を参照してください。
+- 改善のPull Requestを歓迎します。実装・実機検証の共有は[https://tokumaru.work](https://tokumaru.work)からもご連絡いただけます。
 
 ### 1枚あたりの原価は？いくらで売るの？
 
@@ -58,6 +69,6 @@ Maker Faire Tokyo 2026向けの現行製造データは[`production/v5/`](produc
 
 ## ライセンス
 
-このリポジトリで独自に作成したハードウェア設計、製造データ、ファームウェア、Androidアプリ、文書は[MIT License](LICENSE)で提供します。自由に利用・改変・再配布できますが、著作権表示とライセンス表示を保持してください。
+このリポジトリで独自に作成したハードウェア設計、製造データ、ファームウェア、Android/iOSアプリ、文書は[MIT License](LICENSE)で提供します。自由に利用・改変・再配布できますが、著作権表示とライセンス表示を保持してください。
 
 STM32Cube/CMSISやMaterial Symbolsなどの第三者著作物には、それぞれのライセンスが適用されます。詳細は[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を確認してください。
