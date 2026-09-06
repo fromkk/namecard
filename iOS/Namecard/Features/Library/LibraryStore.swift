@@ -9,10 +9,22 @@ final class LibraryStore {
     private(set) var message = ""
 
     private let repository = CardLibraryRepository()
+    private var thumbnails: [String: UIImage] = [:]
 
     init() { reload() }
 
-    func reload() { cards = repository.list() }
+    func reload() {
+        cards = repository.list()
+        // Rebuild the thumbnail cache once per load instead of decoding a card's
+        // BIN and rasterizing a UIImage on every SwiftUI render.
+        let ids = Set(cards.map(\.id))
+        thumbnails = thumbnails.filter { ids.contains($0.key) }
+        for card in cards where thumbnails[card.id] == nil {
+            if let pixels = try? NativeImageFormat.decode(card.bytes) {
+                thumbnails[card.id] = CanvasRenderer.image(fromCanvasPixels: pixels)
+            }
+        }
+    }
 
     func save(name: String, bytes: [UInt8]) {
         do {
@@ -56,8 +68,7 @@ final class LibraryStore {
     }
 
     func thumbnail(for card: LibraryCard) -> UIImage? {
-        guard let pixels = try? NativeImageFormat.decode(card.bytes) else { return nil }
-        return CanvasRenderer.image(fromCanvasPixels: pixels)
+        thumbnails[card.id]
     }
 }
 

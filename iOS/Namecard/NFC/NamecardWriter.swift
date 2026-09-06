@@ -146,18 +146,26 @@ nonisolated final class NamecardWriter: NSObject, @unchecked Sendable {
         try ack.requireSuccess()
         try await mailbox.disable()
 
-        progress(TransferProgress(fraction: 0.5, status: "URLを書き込み中"))
-        let (status, _) = try await tag.queryNDEFStatus()
-        guard status == .readWrite else { throw NamecardWriterError.ndefNotWritable }
-        try await tag.writeNDEF(message)
+        // The firmware paused its mailbox auto-enable for NDEF_WRITE_PREPARE and
+        // the mailbox is now disabled. Re-enable it on every exit path (as the
+        // Android runUrlWrite does in a finally); otherwise a failed write leaves
+        // the card with image processing paused.
+        do {
+            progress(TransferProgress(fraction: 0.5, status: "URLを書き込み中"))
+            let (status, _) = try await tag.queryNDEFStatus()
+            guard status == .readWrite else { throw NamecardWriterError.ndefNotWritable }
+            try await tag.writeNDEF(message)
 
-        progress(TransferProgress(fraction: 0.8, status: "URLを確認中"))
-        let readBack = try await tag.readNDEF()
-        guard readBack.records.contains(where: { $0.wellKnownTypeURIPayload() == url }) else {
-            throw NamecardWriterError.ndefVerifyFailed
+            progress(TransferProgress(fraction: 0.8, status: "URLを確認中"))
+            let readBack = try await tag.readNDEF()
+            guard readBack.records.contains(where: { $0.wellKnownTypeURIPayload() == url }) else {
+                throw NamecardWriterError.ndefVerifyFailed
+            }
+        } catch {
+            try? await mailbox.enable()
+            throw error
         }
 
-        // Best effort: re-enable the mailbox so image writes work again.
         try? await mailbox.enable()
         log("URLを書き込み、読み返して確認しました: \(url.absoluteString)")
         progress(TransferProgress(fraction: 1.0, status: "URLを書き込みました"))

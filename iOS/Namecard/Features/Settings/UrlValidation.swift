@@ -25,17 +25,18 @@ enum UrlValidation {
         }
 
         let candidate = hasWebScheme ? trimmed : "https://" + trimmed
+        // Percent-encode invalid characters (e.g. a non-ASCII path) so a URL the
+        // Android client accepts is not rejected here. Whitespace was already
+        // rejected above, matching Android.
         guard
-            let components = URLComponents(string: candidate),
+            let url = URL(string: candidate, encodingInvalidCharacters: true),
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             let scheme = components.scheme?.lowercased(), scheme == "http" || scheme == "https"
         else {
             return .invalid("http:// または https:// のURLを入力してください")
         }
         guard let host = components.host, !host.isEmpty else {
             return .invalid("ホスト名を含むURLを入力してください")
-        }
-        guard let url = components.url else {
-            return .invalid("URLの形式を確認してください")
         }
         return .valid(url.absoluteString)
     }
